@@ -1,6 +1,5 @@
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $MyInvocation.MyCommand.Path
-$source = Join-Path $project 'ascii-translation.cpp'
 $build = Join-Path $project 'build\Debug'
 $opencvRoot = Join-Path $project 'opencv\build'
 
@@ -9,8 +8,10 @@ function Find-File([string]$Root, [string]$Name) {
         Select-Object -First 1
 }
 
-if (-not (Test-Path $source)) {
-    throw "ascii-translation.cpp was not found in $project."
+foreach ($sourceName in @('ascii-translation.cpp', 'ascii-translation-gpu.cpp')) {
+    if (-not (Test-Path (Join-Path $project $sourceName))) {
+        throw "$sourceName was not found in $project."
+    }
 }
 
 $header = Join-Path $opencvRoot 'include\opencv2\opencv.hpp'
@@ -65,21 +66,26 @@ if (-not $cl) {
 }
 
 New-Item -ItemType Directory -Force -Path $build | Out-Null
-$exe = Join-Path $build 'ascii-translation.exe'
 $libDir = Split-Path $library.FullName -Parent
 $dllDir = Split-Path $dll.FullName -Parent
 $env:Path = "$dllDir;$env:Path"
 
-Write-Host "Compiling with $($cl.FullName)..."
-& $cl.FullName /nologo /std:c++17 /O2 /EHsc "/I$($header | Split-Path -Parent | Split-Path -Parent)" $source "/Fe:$exe" /link "/LIBPATH:$libDir" $library.Name
-if ($LASTEXITCODE -ne 0) {
-    throw 'The C++ build failed.'
+function Build-Renderer([string]$SourceName, [string]$OutputName) {
+    $sourcePath = Join-Path $project $SourceName
+    $outputPath = Join-Path $build $OutputName
+    Write-Host "Compiling $SourceName with $($cl.FullName)..."
+    & $cl.FullName /nologo /std:c++17 /O2 /EHsc "/I$($header | Split-Path -Parent | Split-Path -Parent)" $sourcePath "/Fe:$outputPath" /link "/LIBPATH:$libDir" $library.Name user32.lib gdi32.lib
+    if ($LASTEXITCODE -ne 0) {
+        throw "The build failed for $SourceName."
+    }
+    Write-Host "Built $outputPath"
 }
 
+Build-Renderer 'ascii-translation.cpp' 'ascii-translation.exe'
+Build-Renderer 'ascii-translation-gpu.cpp' 'ascii-translation-gpu.exe'
 Copy-Item $dll.FullName $build -Force
-Write-Host "Built $exe"
 if (Test-Path (Join-Path $project 'bird.mp4')) {
-    Write-Host 'Run build\Debug\ascii-translation.exe to play bird.mp4.'
+    Write-Host 'Run either executable in build\Debug to play bird.mp4.'
 } else {
-    Write-Host 'Add a video file, then run: build\Debug\ascii-translation.exe path\to\video.mp4'
+    Write-Host 'Add a video file, then run either executable with its path as the first argument.'
 }
