@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <stdexcept>
 #include <opencv2/opencv.hpp>
 
 const std::string ASCII_CHARS = " .:-=+*#%@";
@@ -14,6 +15,25 @@ char pixelToAscii(int grayValue) {
 
 int main(int argc, char** argv) {
     const std::string videoPath = argc >= 2 ? argv[1] : VIDEO_PATH;
+    cv::Scalar textColor(255, 80, 255);
+
+    if (argc == 5) {
+        try {
+            const int red = std::stoi(argv[2]);
+            const int green = std::stoi(argv[3]);
+            const int blue = std::stoi(argv[4]);
+            if (red < 0 || red > 255 || green < 0 || green > 255 || blue < 0 || blue > 255) {
+                throw std::out_of_range("color component");
+            }
+            textColor = cv::Scalar(blue, green, red);
+        } catch (const std::exception&) {
+            std::cerr << "Color must be three integers from 0 to 255: red green blue" << std::endl;
+            return -1;
+        }
+    } else if (argc != 1 && argc != 2) {
+        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue]" << std::endl;
+        return -1;
+    }
 
     // Open the video file
     cv::VideoCapture cap(videoPath);
@@ -53,7 +73,11 @@ int main(int argc, char** argv) {
 
     while (true) {
         cap >> frame; // Read next frame
-        if (frame.empty()) break; // End of video
+        if (frame.empty()) {
+            cap.set(cv::CAP_PROP_POS_FRAMES, 0);
+            cap >> frame;
+            if (frame.empty()) break;
+        }
 
         // 1. Resize the frame down to terminal resolution
         cv::resize(frame, resizedFrame, cv::Size(TARGET_WIDTH, targetHeight));
@@ -67,22 +91,38 @@ int main(int argc, char** argv) {
             TARGET_WIDTH * CHAR_WIDTH,
             CV_8UC3,
             cv::Scalar(0, 0, 0));
+        cv::Mat glowImage = cv::Mat::zeros(asciiImage.size(), asciiImage.type());
 
         for (int y = 0; y < grayFrame.rows; ++y) {
             for (int x = 0; x < grayFrame.cols; ++x) {
                 uchar grayValue = grayFrame.at<uchar>(y, x);
                 std::string character(1, pixelToAscii(grayValue));
+                const cv::Point textPosition(
+                    x * CHAR_WIDTH,
+                    (y + 1) * LINE_HEIGHT - BASELINE);
+                cv::putText(
+                    glowImage,
+                    character,
+                    textPosition,
+                    FONT_FACE,
+                    FONT_SCALE,
+                    textColor,
+                    FONT_THICKNESS,
+                    cv::LINE_AA);
                 cv::putText(
                     asciiImage,
                     character,
-                    cv::Point(x * CHAR_WIDTH, (y + 1) * LINE_HEIGHT - BASELINE),
+                    textPosition,
                     FONT_FACE,
                     FONT_SCALE,
-                    cv::Scalar(255, 255, 255),
+                    textColor,
                     FONT_THICKNESS,
                     cv::LINE_AA);
             }
         }
+
+        cv::GaussianBlur(glowImage, glowImage, cv::Size(0, 0), 80.0);
+        cv::addWeighted(asciiImage, 1.0, glowImage, 2.5, 0.0, asciiImage);
 
         // 4. Render to the standalone OpenCV window
         cv::imshow("ASCII Video", asciiImage);
