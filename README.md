@@ -1,12 +1,16 @@
-## Usage
+#how to
 
-ascii-translation.exe [video-path] [red] [green] [blue] [-g] [-gs value]
-ascii-translation-gpu.exe [video-path] [red] [green] [blue] [-g] [-gs value]
+ascii-translation.exe [video-path] [red] [green] [blue] [-t|-o] [-g] [-gs value]
+ascii-translation-gpu.exe [video-path] [red] [green] [blue] [-t|-o] [-g] [-gs value]
 
-Use `--glow-strength` or `-gs` with any non-negative number to customize the
-glow brightness. `--glow` and `-g` enable the effect. For example:
+The transparent overlay is enabled by default. Use "-o" ("--opaque") or
+"--no-transparent" to render the black background. Use "-t" ("--transparent")
+to explicitly enable the overlay.
 
-ascii-translation.exe bird.mp4 -g -gs 3
+Use "--glow-strength" or "-gs" with any non-negative number to customize the
+glow brightness. "--glow" and "-g" enable the effect. For example:
+
+ascii-translation.exe c:\..\downloads\bird.mp4 -t -g -gs 3
 
 The default strength is
-`5.0` for the CPU renderer and `2.5` for the GPU renderer.
+"5.0" for the CPU renderer and "2.5" for the GPU renderer.
