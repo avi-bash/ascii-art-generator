@@ -71,7 +71,7 @@ $dllDir = Split-Path $dll.FullName -Parent
 $env:Path = "$dllDir;$env:Path"
 
 Write-Host "Compiling with $($cl.FullName)..."
-& $cl.FullName /nologo /std:c++17 /EHsc "/I$($header | Split-Path -Parent | Split-Path -Parent)" $source "/Fe:$exe" /link "/LIBPATH:$libDir" $library.Name
+& $cl.FullName /nologo /std:c++17 /O2 /EHsc "/I$($header | Split-Path -Parent | Split-Path -Parent)" $source "/Fe:$exe" /link "/LIBPATH:$libDir" $library.Name
 if ($LASTEXITCODE -ne 0) {
     throw 'The C++ build failed.'
 }
