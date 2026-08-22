@@ -9,7 +9,7 @@
 #include <opencv2/core/ocl.hpp>
 #include <opencv2/opencv.hpp>
 
-const std::string ASCII_CHARS = " .:-=+*#%@";
+const std::string ASCII_CHARS = ".:><-=+*#%@";
 
 static const char* ASCII_RENDER_KERNEL = R"CLC(
 __kernel void ascii_render(
@@ -182,8 +182,19 @@ int main(int argc, char** argv) {
     if (!(fps > 0.0) || !std::isfinite(fps)) fps = 30.0;
     const auto framePeriod = std::chrono::duration<double>(1.0 / fps);
     auto nextFrameDeadline = std::chrono::steady_clock::now();
+    bool paused = false;
 
     while (true) {
+        if (paused) {
+            const int key = cv::waitKey(30);
+            if (key == 32) {
+                paused = false;
+                nextFrameDeadline = std::chrono::steady_clock::now();
+            }
+            if (key == 27 || key == 'q' || key == 'Q') break;
+            continue;
+        }
+
         while (std::chrono::steady_clock::now() > nextFrameDeadline +
             std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod)) {
             if (!cap.grab()) {
@@ -231,6 +242,7 @@ int main(int argc, char** argv) {
         if (now > nextFrameDeadline) nextFrameDeadline = now;
         const auto waitTime = std::chrono::duration_cast<std::chrono::milliseconds>(nextFrameDeadline - now);
         const int key = cv::waitKey(std::max(1, static_cast<int>(waitTime.count())));
+        if (key == 32) paused = true;
         if (key == 27 || key == 'q' || key == 'Q') break;
     }
 
