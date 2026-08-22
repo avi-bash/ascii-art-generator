@@ -7,7 +7,7 @@
 #include <vector>
 #include <opencv2/opencv.hpp>
 
-const std::string ASCII_CHARS = " .:-=+*#%@";
+const std::string ASCII_CHARS = ".:-=+*#%@";
 
 // Function to convert a single grayscale pixel value to an ASCII character
 int main(int argc, char** argv) {
@@ -125,8 +125,19 @@ int main(int argc, char** argv) {
     if (!(fps > 0.0) || !std::isfinite(fps)) fps = 30.0;
     const auto framePeriod = std::chrono::duration<double>(1.0 / fps);
     auto nextFrameDeadline = std::chrono::steady_clock::now();
+    bool isPaused = false;
 
     while (true) {
+        if (isPaused) {
+            const int key = cv::waitKey(30);
+            if (key == 27 || key == 'q' || key == 'Q') break;
+            if (key == ' ') {
+                isPaused = false;
+                nextFrameDeadline = std::chrono::steady_clock::now();
+            }
+            continue;
+        }
+
         while (std::chrono::steady_clock::now() > nextFrameDeadline +
             std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod)) {
             if (!cap.grab()) {
@@ -186,6 +197,7 @@ int main(int argc, char** argv) {
         const auto waitTime = std::chrono::duration_cast<std::chrono::milliseconds>(nextFrameDeadline - now);
         int key = cv::waitKey(std::max(1, static_cast<int>(waitTime.count())));
         if (key == 27 || key == 'q' || key == 'Q') break;
+        if (key == ' ') isPaused = true;
     }
 
     cv::destroyAllWindows();
