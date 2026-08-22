@@ -4,7 +4,6 @@
 #include <opencv2/opencv.hpp>
 
 const std::string ASCII_CHARS = " .:-=+*#%@";
-const std::string VIDEO_PATH = "C:\\Users\\avi\\Downloads\\bird.mp4";
 
 // Function to convert a single grayscale pixel value to an ASCII character
 char pixelToAscii(int grayValue) {
@@ -14,7 +13,7 @@ char pixelToAscii(int grayValue) {
 }
 
 int main(int argc, char** argv) {
-    const std::string videoPath = argc >= 2 ? argv[1] : VIDEO_PATH;
+    const std::string videoPath = argc >= 2 ? argv[1] : "bird.mp4";
     cv::Scalar textColor(255, 80, 255);
 
     if (argc == 5) {
@@ -39,7 +38,7 @@ int main(int argc, char** argv) {
     cv::VideoCapture cap(videoPath);
     if (!cap.isOpened()) {
         std::cerr << "Error: Could not open video file: " << videoPath << std::endl;
-        std::cerr << "Set VIDEO_PATH near the top of the file or pass a path as an argument." << std::endl;
+        std::cerr << "Pass a video path as the first argument, or place bird.mp4 in the project folder." << std::endl;
         return -1;
     }
 
@@ -91,7 +90,6 @@ int main(int argc, char** argv) {
             TARGET_WIDTH * CHAR_WIDTH,
             CV_8UC3,
             cv::Scalar(0, 0, 0));
-        cv::Mat glowImage = cv::Mat::zeros(asciiImage.size(), asciiImage.type());
 
         for (int y = 0; y < grayFrame.rows; ++y) {
             for (int x = 0; x < grayFrame.cols; ++x) {
@@ -100,15 +98,6 @@ int main(int argc, char** argv) {
                 const cv::Point textPosition(
                     x * CHAR_WIDTH,
                     (y + 1) * LINE_HEIGHT - BASELINE);
-                cv::putText(
-                    glowImage,
-                    character,
-                    textPosition,
-                    FONT_FACE,
-                    FONT_SCALE,
-                    textColor,
-                    FONT_THICKNESS,
-                    cv::LINE_AA);
                 cv::putText(
                     asciiImage,
                     character,
@@ -121,7 +110,8 @@ int main(int argc, char** argv) {
             }
         }
 
-        cv::GaussianBlur(glowImage, glowImage, cv::Size(0, 0), 80.0);
+        cv::Mat glowImage = asciiImage.clone();
+        cv::GaussianBlur(glowImage, glowImage, cv::Size(0, 0), 20.0);
         cv::addWeighted(asciiImage, 1.0, glowImage, 2.5, 0.0, asciiImage);
 
         // 4. Render to the standalone OpenCV window
