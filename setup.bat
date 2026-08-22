@@ -13,7 +13,7 @@ echo.
 if not "%EXIT_CODE%"=="0" (
     echo Setup failed. Read the message above for the missing requirement.
 ) else (
-    echo Setup finished. The executable is in build\Debug\ascii-translation.exe
+    echo Setup finished. CPU and GPU executables are in build\Debug.
 )
 pause
 exit /b %EXIT_CODE%
