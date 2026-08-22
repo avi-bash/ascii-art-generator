@@ -12,13 +12,38 @@ const std::string ASCII_CHARS = " .:-=+*#%@";
 // Function to convert a single grayscale pixel value to an ASCII character
 int main(int argc, char** argv) {
     bool enableGlow = false;
+    double glowStrength = 5.0;
     for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex) {
-        if (std::string(argv[argumentIndex]) == "--glow") {
+        if (std::string(argv[argumentIndex]) == "--glow" ||
+            std::string(argv[argumentIndex]) == "-g") {
             enableGlow = true;
             for (int shiftIndex = argumentIndex; shiftIndex + 1 < argc; ++shiftIndex) {
                 argv[shiftIndex] = argv[shiftIndex + 1];
             }
             --argc;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--glow-strength" ||
+               std::string(argv[argumentIndex]) == "-gs") {
+            if (argumentIndex + 1 >= argc) {
+                std::cerr << "Glow strength must be a non-negative number." << std::endl;
+                return -1;
+            }
+            try {
+                std::size_t parsedLength = 0;
+                const std::string strengthArgument = argv[argumentIndex + 1];
+                glowStrength = std::stod(strengthArgument, &parsedLength);
+                if (parsedLength != strengthArgument.length() ||
+                    glowStrength < 0.0 || !std::isfinite(glowStrength)) {
+                    throw std::invalid_argument("glow strength");
+                }
+            } catch (const std::exception&) {
+                std::cerr << "Glow strength must be a non-negative number." << std::endl;
+                return -1;
+            }
+            for (int shiftIndex = argumentIndex; shiftIndex + 2 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 2];
+            }
+            argc -= 2;
             --argumentIndex;
         }
     }
@@ -39,7 +64,7 @@ int main(int argc, char** argv) {
             return -1;
         }
     } else if (argc != 1 && argc != 2) {
-        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue] [--glow]" << std::endl;
+        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
         return -1;
     }
 
@@ -148,7 +173,7 @@ int main(int argc, char** argv) {
             cv::resize(asciiImage, glowImage, glowSize, 0.0, 0.0, cv::INTER_AREA);
             cv::GaussianBlur(glowImage, glowImage, cv::Size(0, 0), 15.0);
             cv::resize(glowImage, glowImage, asciiImage.size(), 0.0, 0.0, cv::INTER_LINEAR);
-            cv::addWeighted(asciiImage, 1.0, glowImage, 5, 0.0, asciiImage);
+            cv::addWeighted(asciiImage, 1.0, glowImage, glowStrength, 0.0, asciiImage);
         }
 
         // 4. Render to the standalone OpenCV window
