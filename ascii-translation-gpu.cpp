@@ -8,6 +8,7 @@
 
 #include <opencv2/core/ocl.hpp>
 #include <opencv2/opencv.hpp>
+#include "transparent_window.h"
 
 const std::string ASCII_CHARS = ".:><-=+*#%@";
 
@@ -60,11 +61,29 @@ __kernel void ascii_render(
 
 int main(int argc, char** argv) {
     bool enableGlow = false;
-    double glowStrength = 2.5;
+    bool transparent = true;
+    double glowStrength = 5;
     for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex) {
         if (std::string(argv[argumentIndex]) == "--glow" ||
             std::string(argv[argumentIndex]) == "-g") {
             enableGlow = true;
+            for (int shiftIndex = argumentIndex; shiftIndex + 1 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 1];
+            }
+            --argc;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--transparent" ||
+               std::string(argv[argumentIndex]) == "-t") {
+            transparent = true;
+            for (int shiftIndex = argumentIndex; shiftIndex + 1 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 1];
+            }
+            --argc;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--opaque" ||
+               std::string(argv[argumentIndex]) == "-o" ||
+                   std::string(argv[argumentIndex]) == "--no-transparent") {
+            transparent = false;
             for (int shiftIndex = argumentIndex; shiftIndex + 1 < argc; ++shiftIndex) {
                 argv[shiftIndex] = argv[shiftIndex + 1];
             }
@@ -112,7 +131,7 @@ int main(int argc, char** argv) {
             return -1;
         }
     } else if (argc != 1 && argc != 2) {
-        std::cerr << "Usage: ascii-translation-gpu.exe [video-path] [red] [green] [blue] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
+        std::cerr << "Usage: ascii-translation-gpu.exe [video-path] [red] [green] [blue] [-t|-o] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
         return -1;
     }
 
@@ -165,7 +184,8 @@ int main(int argc, char** argv) {
     cv::UMat gpuGlyphAtlas, gpuMaskAtlas;
     glyphAtlas.copyTo(gpuGlyphAtlas);
     maskAtlas.copyTo(gpuMaskAtlas);
-    cv::UMat gpuFrame, gpuAscii, gpuGlow;
+    cv::Mat frame;
+    cv::UMat gpuFrame, gpuAscii, gpuGlowSmall, gpuGlow;
     cv::Mat displayImage;
 
     const cv::ocl::ProgramSource programSource("ascii_gpu_full", "ascii_render", ASCII_RENDER_KERNEL, "");
@@ -175,8 +195,11 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    cv::namedWindow("ASCII Video", cv::WINDOW_NORMAL);
-    cv::resizeWindow("ASCII Video", windowWidth, windowHeight);
+    TransparentWindow window("ASCII Video", windowWidth, windowHeight, transparent);
+    if (!window.isOpen()) {
+        std::cerr << "Error: Could not create the transparent display window." << std::endl;
+        return -1;
+    }
 
     double fps = cap.get(cv::CAP_PROP_FPS);
     if (!(fps > 0.0) || !std::isfinite(fps)) fps = 30.0;
@@ -186,12 +209,13 @@ int main(int argc, char** argv) {
 
     while (true) {
         if (paused) {
-            const int key = cv::waitKey(30);
+            const int key = window.waitKey(30);
             if (key == 32) {
                 paused = false;
                 nextFrameDeadline = std::chrono::steady_clock::now();
             }
             if (key == 27 || key == 'q' || key == 'Q') break;
+            if (!window.isOpen()) break;
             continue;
         }
 
@@ -203,7 +227,6 @@ int main(int argc, char** argv) {
             nextFrameDeadline += std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod);
         }
 
-        cv::Mat frame;
         cap >> frame;
         if (frame.empty()) {
             if (!cap.set(cv::CAP_PROP_POS_FRAMES, 0)) break;
@@ -228,24 +251,24 @@ int main(int argc, char** argv) {
 
         if (enableGlow) {
             const cv::Size glowSize(std::max(1, outputWidth / 4), std::max(1, outputHeight / 4));
-            cv::resize(gpuAscii, gpuGlow, glowSize, 0.0, 0.0, cv::INTER_AREA);
-            cv::GaussianBlur(gpuGlow, gpuGlow, cv::Size(0, 0), 5.0);
-            cv::resize(gpuGlow, gpuGlow, gpuAscii.size(), 0.0, 0.0, cv::INTER_LINEAR);
+            cv::resize(gpuAscii, gpuGlowSmall, glowSize, 0.0, 0.0, cv::INTER_AREA);
+            cv::GaussianBlur(gpuGlowSmall, gpuGlowSmall, cv::Size(0, 0), 5.0);
+            cv::resize(gpuGlowSmall, gpuGlow, gpuAscii.size(), 0.0, 0.0, cv::INTER_LINEAR);
             cv::addWeighted(gpuAscii, 1.0, gpuGlow, glowStrength, 0.0, gpuAscii);
         }
 
         gpuAscii.copyTo(displayImage);
-        cv::imshow("ASCII Video", displayImage);
+        window.show(displayImage);
 
         nextFrameDeadline += std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod);
         const auto now = std::chrono::steady_clock::now();
         if (now > nextFrameDeadline) nextFrameDeadline = now;
         const auto waitTime = std::chrono::duration_cast<std::chrono::milliseconds>(nextFrameDeadline - now);
-        const int key = cv::waitKey(std::max(1, static_cast<int>(waitTime.count())));
+        const int key = window.waitKey(std::max(1, static_cast<int>(waitTime.count())));
         if (key == 32) paused = true;
         if (key == 27 || key == 'q' || key == 'Q') break;
+        if (!window.isOpen()) break;
     }
 
-    cv::destroyAllWindows();
     return 0;
 }
