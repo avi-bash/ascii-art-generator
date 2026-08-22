@@ -6,17 +6,36 @@
 #include <stdexcept>
 #include <vector>
 #include <opencv2/opencv.hpp>
+#include "transparent_window.h"
 
 const std::string ASCII_CHARS = ".:-=+*#%@";
 
 // Function to convert a single grayscale pixel value to an ASCII character
 int main(int argc, char** argv) {
     bool enableGlow = false;
+    bool transparent = true;
     double glowStrength = 5.0;
     for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex) {
         if (std::string(argv[argumentIndex]) == "--glow" ||
             std::string(argv[argumentIndex]) == "-g") {
             enableGlow = true;
+            for (int shiftIndex = argumentIndex; shiftIndex + 1 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 1];
+            }
+            --argc;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--transparent" ||
+               std::string(argv[argumentIndex]) == "-t") {
+            transparent = true;
+            for (int shiftIndex = argumentIndex; shiftIndex + 1 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 1];
+            }
+            --argc;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--opaque" ||
+               std::string(argv[argumentIndex]) == "-o" ||
+                   std::string(argv[argumentIndex]) == "--no-transparent") {
+            transparent = false;
             for (int shiftIndex = argumentIndex; shiftIndex + 1 < argc; ++shiftIndex) {
                 argv[shiftIndex] = argv[shiftIndex + 1];
             }
@@ -64,7 +83,7 @@ int main(int argc, char** argv) {
             return -1;
         }
     } else if (argc != 1 && argc != 2) {
-        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
+        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue] [-t|-o] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
         return -1;
     }
 
@@ -90,7 +109,7 @@ int main(int argc, char** argv) {
     double videoAspectRatio = static_cast<double>(VIDEO_WIDTH) / VIDEO_HEIGHT;
     const int targetHeight = std::max(1, static_cast<int>(TARGET_WIDTH / (videoAspectRatio * 2.0)));
 
-    cv::Mat frame, grayFrame, resizedFrame;
+    cv::Mat frame, grayFrame, resizedFrame, asciiImage, glowImage;
 
     const int FONT_FACE = cv::FONT_HERSHEY_PLAIN;
     const double FONT_SCALE = 1.0;
@@ -117,8 +136,11 @@ int main(int argc, char** argv) {
         glyphMasks.push_back(glyphMask);
     }
 
-    cv::namedWindow("ASCII Video", cv::WINDOW_NORMAL);
-    cv::resizeWindow("ASCII Video", WINDOW_WIDTH, WINDOW_HEIGHT);
+    TransparentWindow window("ASCII Video", WINDOW_WIDTH, WINDOW_HEIGHT, transparent);
+    if (!window.isOpen()) {
+        std::cerr << "Error: Could not create the transparent display window." << std::endl;
+        return -1;
+    }
 
     // Get the frame rate of the original video to approximate playback speed
     double fps = cap.get(cv::CAP_PROP_FPS);
@@ -129,8 +151,9 @@ int main(int argc, char** argv) {
 
     while (true) {
         if (isPaused) {
-            const int key = cv::waitKey(30);
+            const int key = window.waitKey(30);
             if (key == 27 || key == 'q' || key == 'Q') break;
+            if (!window.isOpen()) break;
             if (key == ' ') {
                 isPaused = false;
                 nextFrameDeadline = std::chrono::steady_clock::now();
@@ -160,11 +183,9 @@ int main(int argc, char** argv) {
         cv::cvtColor(resizedFrame, grayFrame, cv::COLOR_BGR2GRAY);
 
         // 3. Draw the ASCII frame into an image for the OpenCV window
-        cv::Mat asciiImage(
-            targetHeight * LINE_HEIGHT + BASELINE,
-            TARGET_WIDTH * CHAR_WIDTH,
-            CV_8UC3,
-            cv::Scalar(0, 0, 0));
+        asciiImage.create(targetHeight * LINE_HEIGHT + BASELINE,
+            TARGET_WIDTH * CHAR_WIDTH, CV_8UC3);
+        asciiImage.setTo(cv::Scalar(0, 0, 0));
 
         for (int y = 0; y < grayFrame.rows; ++y) {
             for (int x = 0; x < grayFrame.cols; ++x) {
@@ -180,26 +201,25 @@ int main(int argc, char** argv) {
             const cv::Size glowSize(
                 std::max(1, asciiImage.cols / 4),
                 std::max(1, asciiImage.rows / 4));
-            cv::Mat glowImage;
             cv::resize(asciiImage, glowImage, glowSize, 0.0, 0.0, cv::INTER_AREA);
-            cv::GaussianBlur(glowImage, glowImage, cv::Size(0, 0), 15.0);
+            cv::GaussianBlur(glowImage, glowImage, cv::Size(0, 0), 5.0);
             cv::resize(glowImage, glowImage, asciiImage.size(), 0.0, 0.0, cv::INTER_LINEAR);
             cv::addWeighted(asciiImage, 1.0, glowImage, glowStrength, 0.0, asciiImage);
         }
 
         // 4. Render to the standalone OpenCV window
-        cv::imshow("ASCII Video", asciiImage);
+        window.show(asciiImage);
 
         // Maintain playback frame rate and allow the user to quit with Esc or Q
         nextFrameDeadline += std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod);
         const auto now = std::chrono::steady_clock::now();
         if (now > nextFrameDeadline) nextFrameDeadline = now;
         const auto waitTime = std::chrono::duration_cast<std::chrono::milliseconds>(nextFrameDeadline - now);
-        int key = cv::waitKey(std::max(1, static_cast<int>(waitTime.count())));
+        int key = window.waitKey(std::max(1, static_cast<int>(waitTime.count())));
         if (key == 27 || key == 'q' || key == 'Q') break;
+        if (!window.isOpen()) break;
         if (key == ' ') isPaused = true;
     }
 
-    cv::destroyAllWindows();
     return 0;
 }
