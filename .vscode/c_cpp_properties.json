@@ -1,17 +1,17 @@
 {
     "configurations": [
         {
-            "name": "windows-msvc-x64",
+            "name": "windows-msvc",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/opencv/build/include",
+                "${workspaceFolder}/opencv/build/include"
             ],
-            "compilerPath": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe",
-            "cStandard": "${default}",
-            "cppStandard": "${default}",
+            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/HostX64/x64/cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
             "intelliSenseMode": "windows-msvc-x64",
-            "compilerArgs": [
-                ""
-            ]
+            "compilerArgs": []
         }
     ],
     "version": 4

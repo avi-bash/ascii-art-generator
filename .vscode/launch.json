@@ -1,36 +1,57 @@
 {
-    "version": "0.2.0",
-    "configurations": [
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug ASCII video",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/build/Debug/ascii-translation.exe",
+      "console": "integratedTerminal",
+      "environment": [
         {
-            "name": "C/C++ Runner: Debug Session",
-            "type": "cppdbg",
-            "request": "launch",
-            "args": [],
-            "stopAtEntry": false,
-            "externalConsole": true,
-            "cwd": "c:/Users/avi/Documents/GitHub/ascii-art-generator",
-            "program": "c:/Users/avi/Documents/GitHub/ascii-art-generator/build/Debug/outDebug",
-            "MIMode": "gdb",
-            "miDebuggerPath": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ]
-        },
-        {
-            "name": "C/C++: cl.exe build and debug active file",
-            "type": "cppvsdbg",
-            "request": "launch",
-            "program": "${fileDirname}\\${fileBasenameNoExtension}.exe",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${fileDirname}",
-            "environment": [],
-            "console": "integratedTerminal",
-            "preLaunchTask": "C/C++: cl.exe build active file"
+          "name": "PATH",
+          "value": "${workspaceFolder}/opencv/build/x64/vc16/bin;${env:PATH}"
         }
-    ]
+      ],
+      "preLaunchTask": "Build with MSVC"
+    },
+    {
+      "name": "C/C++: cl.exe build and debug active file",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/ascii-translation.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment": [
+        {
+          "name": "PATH",
+          "value": "${workspaceFolder}/opencv/build/x64/vc16/bin;${env:PATH}"
+        }
+      ],
+      "console": "integratedTerminal",
+      "preLaunchTask": "Build with MSVC"
+    },
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "args": [],
+      "stopAtEntry": false,
+      "externalConsole": true,
+      "cwd": "c:/Users/avi/Documents/GitHub/ascii-art-generator",
+      "program": "${workspaceFolder}/build/Debug/ascii-translation.exe",
+      "console": "integratedTerminal",
+      "environment": [
+        {
+          "name": "PATH",
+          "value": "${workspaceFolder}/opencv/build/x64/vc16/bin;${env:PATH}"
+        }
+      ],
+      "preLaunchTask": "Build with MSVC"
+    }
+  ]
 }
