@@ -21,7 +21,7 @@ public:
         : title_(title), width_(width), height_(height), hwnd_(nullptr), bitmap_(nullptr),
                 bitmapBits_(nullptr), screenDc_(nullptr), memoryDc_(nullptr),
                 bitmapWidth_(0), bitmapHeight_(0), transparent_(transparent), fullscreen_(false),
-                open_(false), pressedKey_(-1), restoreRect_{} {
+                open_(false), pressedKey_(-1), spaceWasDown_(false), restoreRect_{} {
         static const char* className = "AsciiTransparentWindow";
         static bool classRegistered = false;
         if (!classRegistered) {
@@ -66,6 +66,20 @@ public:
 
     bool isOpen() const {
         return open_;
+    }
+
+    void setTransparent(bool transparent) {
+        transparent_ = transparent;
+    }
+
+    void setSize(int width, int height) {
+        if (width <= 0 || height <= 0) return;
+        width_ = width;
+        height_ = height;
+        if (hwnd_ != nullptr) {
+            SetWindowPos(hwnd_, nullptr, 0, 0, width_, height_,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+        }
     }
 
     void show(const cv::Mat& image) {
@@ -120,6 +134,9 @@ public:
                 TranslateMessage(&message);
                 DispatchMessageA(&message);
             }
+            const bool spaceDown = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
+            if (spaceDown && !spaceWasDown_) pressedKey_ = VK_SPACE;
+            spaceWasDown_ = spaceDown;
             if (pressedKey_ != -1 || !open_) break;
             if (timeoutMilliseconds <= 0) break;
             Sleep(1);
@@ -260,6 +277,7 @@ private:
     bool fullscreen_;
     bool open_;
     int pressedKey_;
+    bool spaceWasDown_;
     RECT restoreRect_;
     cv::Mat resized_;
     cv::Mat bgra_;

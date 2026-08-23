@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <vector>
 #include <opencv2/opencv.hpp>
+#include "settings_window.h"
 #include "transparent_window.h"
 
 const std::string ASCII_CHARS = ".:-=+*#%@";
@@ -163,7 +164,7 @@ int main(int argc, char** argv) {
             --argumentIndex;
         }
     }
-    const std::string videoPath = argc >= 2 ? argv[1] : "bird.mp4";
+    std::string videoPath = argc >= 2 ? argv[1] : "";
     cv::Scalar textColor(255, 80, 255);
 
     if (argc == 5) {
@@ -184,27 +185,59 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    // Open the video file
-    cv::VideoCapture cap(videoPath);
+    RenderSettings settings;
+    settings.transparent = transparent;
+    settings.glowEnabled = enableGlow;
+    settings.transparentThreshold = transparentBrightnessThreshold;
+    settings.red = textColor[2];
+    settings.green = textColor[1];
+    settings.blue = textColor[0];
+    settings.glowStrength = static_cast<int>(std::round(glowStrength * 10.0));
+    settings.glowFalloff = static_cast<int>(std::round(glowFalloff * 10.0));
+    settings.glowResolution = static_cast<int>(std::round(glowResolution * 100.0));
+    settings.glowRadius = glowRadius;
+    SettingsWindow settingsWindow(settings);
+
+    cv::VideoCapture cap;
+    while (videoPath.empty() && !settingsWindow.shouldQuit()) {
+        settingsWindow.update();
+        settingsWindow.takeDroppedFile(videoPath);
+        cv::waitKey(30);
+    }
+    if (settingsWindow.shouldQuit()) return 0;
+
+    // Open the initial video, or wait for a valid dropped file.
+    while (!cap.isOpened() && !settingsWindow.shouldQuit()) {
+        cap.open(videoPath);
+        if (cap.isOpened()) break;
+        std::cerr << "Error: Could not open video file: " << videoPath << std::endl;
+        videoPath.clear();
+        settingsWindow.update();
+        settingsWindow.takeDroppedFile(videoPath);
+        cv::waitKey(30);
+    }
+    if (settingsWindow.shouldQuit()) return 0;
     if (!cap.isOpened()) {
         std::cerr << "Error: Could not open video file: " << videoPath << std::endl;
-        std::cerr << "Pass a video path as the first argument, or place bird.mp4 in the project folder." << std::endl;
         return -1;
     }
 
     // Target width for the window display (adjust based on your screen size)
-    const int TARGET_WIDTH = 150;
+    int targetWidth = settings.asciiResolution;
     
     // Terminal characters are taller than they are wide (usually a 1:2 aspect ratio).
     // We adjust the height scale so the ASCII output doesn't look vertically stretched.
-    const int VIDEO_WIDTH = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
-    const int VIDEO_HEIGHT = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
-    if (VIDEO_WIDTH <= 0 || VIDEO_HEIGHT <= 0) {
+    int videoWidth = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+    int videoHeight = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+    if (videoWidth <= 0 || videoHeight <= 0) {
         std::cerr << "Error: Video dimensions could not be read." << std::endl;
         return -1;
     }
-    double videoAspectRatio = static_cast<double>(VIDEO_WIDTH) / VIDEO_HEIGHT;
-    const int targetHeight = std::max(1, static_cast<int>(TARGET_WIDTH / (videoAspectRatio * 2.0)));
+    double videoAspectRatio = static_cast<double>(videoWidth) / videoHeight;
+    settingsWindow.setVideoAspectRatio(videoAspectRatio);
+    settings.videoDisplayWidth = std::clamp(
+        static_cast<int>(std::round(settings.videoDisplayHeight * videoAspectRatio)), 180, 1600);
+    int targetHeight = std::max(1, static_cast<int>(targetWidth / (videoAspectRatio * 2.0)));
 
     cv::Mat frame, grayFrame, resizedFrame, asciiImage, glowImage;
 
@@ -214,9 +247,8 @@ int main(int argc, char** argv) {
     const int CHAR_WIDTH = 10;
     const int LINE_HEIGHT = 14;
     const int BASELINE = 3;
-    const int WINDOW_HEIGHT = 780;
-    const int WINDOW_WIDTH = static_cast<int>(
-        WINDOW_HEIGHT * static_cast<double>(VIDEO_WIDTH) / VIDEO_HEIGHT);
+    int windowHeight = settings.videoDisplayHeight;
+    int windowWidth = settings.videoDisplayWidth;
 
     std::vector<cv::Mat> glyphs;
     std::vector<cv::Mat> glyphMasks;
@@ -233,7 +265,7 @@ int main(int argc, char** argv) {
         glyphMasks.push_back(glyphMask);
     }
 
-    TransparentWindow window("ASCII Video", WINDOW_WIDTH, WINDOW_HEIGHT, transparent);
+    TransparentWindow window("ASCII Video", windowWidth, windowHeight, transparent);
     if (!window.isOpen()) {
         std::cerr << "Error: Could not create the transparent display window." << std::endl;
         return -1;
@@ -242,46 +274,90 @@ int main(int argc, char** argv) {
     // Get the frame rate of the original video to approximate playback speed
     double fps = cap.get(cv::CAP_PROP_FPS);
     if (!(fps > 0.0) || !std::isfinite(fps)) fps = 30.0;
-    const auto framePeriod = std::chrono::duration<double>(1.0 / fps);
+    auto framePeriod = std::chrono::duration<double>(1.0 / fps);
     auto nextFrameDeadline = std::chrono::steady_clock::now();
     bool isPaused = false;
 
     while (true) {
-        if (isPaused) {
-            const int key = window.waitKey(30);
-            if (key == 27 || key == 'q' || key == 'Q') break;
-            if (!window.isOpen()) break;
-            if (key == ' ') {
-                isPaused = false;
+        settingsWindow.update();
+        if (settingsWindow.shouldQuit()) break;
+        std::string droppedFile;
+        if (settingsWindow.takeDroppedFile(droppedFile)) {
+            cv::VideoCapture replacement(droppedFile);
+            const int replacementWidth = static_cast<int>(replacement.get(cv::CAP_PROP_FRAME_WIDTH));
+            const int replacementHeight = static_cast<int>(replacement.get(cv::CAP_PROP_FRAME_HEIGHT));
+            if (replacement.isOpened() && replacementWidth > 0 && replacementHeight > 0) {
+                cap = std::move(replacement);
+                videoWidth = replacementWidth;
+                videoHeight = replacementHeight;
+                videoAspectRatio = static_cast<double>(videoWidth) / videoHeight;
+                settingsWindow.setVideoAspectRatio(videoAspectRatio);
+                settings.videoDisplayWidth = std::clamp(
+                    static_cast<int>(std::round(settings.videoDisplayHeight * videoAspectRatio)), 180, 1600);
+                targetHeight = std::max(1, static_cast<int>(targetWidth / (videoAspectRatio * 2.0)));
+                windowWidth = settings.videoDisplayWidth;
+                windowHeight = settings.videoDisplayHeight;
+                window.setSize(windowWidth, windowHeight);
+                fps = cap.get(cv::CAP_PROP_FPS);
+                if (!(fps > 10.0) || !std::isfinite(fps)) fps = 30.0;
+                framePeriod = std::chrono::duration<double>(1.0 / fps);
                 nextFrameDeadline = std::chrono::steady_clock::now();
             }
-            continue;
+        }
+        targetWidth = std::max(40, settings.asciiResolution);
+        targetHeight = std::max(1, static_cast<int>(targetWidth / (videoAspectRatio * 2.0)));
+        windowWidth = std::max(180, static_cast<int>(std::round(
+            settings.videoDisplayWidth * settings.videoScale / 100.0)));
+        windowHeight = std::max(180, static_cast<int>(std::round(
+            settings.videoDisplayHeight * settings.videoScale / 100.0)));
+        window.setSize(windowWidth, windowHeight);
+        transparent = settings.transparent;
+        enableGlow = settings.glowEnabled;
+        transparentBrightnessThreshold = settings.transparentThreshold;
+        glowStrength = settings.glowStrengthValue();
+        glowFalloff = settings.glowFalloffValue();
+        glowResolution = settings.glowResolutionValue();
+        glowRadius = settings.glowRadius;
+        window.setTransparent(transparent);
+
+        const cv::Scalar updatedTextColor = settings.color();
+        if (updatedTextColor[0] != textColor[0] || updatedTextColor[1] != textColor[1] ||
+            updatedTextColor[2] != textColor[2]) {
+            textColor = updatedTextColor;
+            for (int glyphIndex = 0; glyphIndex < static_cast<int>(ASCII_CHARS.length()); ++glyphIndex) {
+                const std::string character(1, ASCII_CHARS[glyphIndex]);
+                glyphs[glyphIndex].setTo(cv::Scalar(0, 0, 0));
+                cv::putText(glyphs[glyphIndex], character, cv::Point(0, LINE_HEIGHT - BASELINE),
+                    FONT_FACE, FONT_SCALE, textColor, FONT_THICKNESS, cv::LINE_AA);
+            }
         }
 
-        while (std::chrono::steady_clock::now() > nextFrameDeadline +
-            std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod)) {
-            if (!cap.grab()) {
-                cap.set(cv::CAP_PROP_POS_FRAMES, 0);
-                if (!cap.grab()) break;
+        if (!isPaused) {
+            while (std::chrono::steady_clock::now() > nextFrameDeadline +
+                std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod)) {
+                if (!cap.grab()) {
+                    cap.set(cv::CAP_PROP_POS_FRAMES, 0);
+                    if (!cap.grab()) break;
+                }
+                nextFrameDeadline += std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod);
             }
-            nextFrameDeadline += std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod);
-        }
-        cap >> frame; // Read next frame
-        if (frame.empty()) {
-            if (!cap.set(cv::CAP_PROP_POS_FRAMES, 0)) break;
-            cap >> frame;
-            if (frame.empty()) break;
+            cap >> frame; // Read next frame
+            if (frame.empty()) {
+                if (!cap.set(cv::CAP_PROP_POS_FRAMES, 0)) break;
+                cap >> frame;
+                if (frame.empty()) break;
+            }
         }
 
         // 1. Resize the frame down to terminal resolution
-        cv::resize(frame, resizedFrame, cv::Size(TARGET_WIDTH, targetHeight));
+        cv::resize(frame, resizedFrame, cv::Size(targetWidth, targetHeight));
 
         // 2. Convert color frame to grayscale (0-255 light intensity)
         cv::cvtColor(resizedFrame, grayFrame, cv::COLOR_BGR2GRAY);
 
         // 3. Draw the ASCII frame into an image for the OpenCV window
         asciiImage.create(targetHeight * LINE_HEIGHT + BASELINE,
-            TARGET_WIDTH * CHAR_WIDTH, CV_8UC3);
+            targetWidth * CHAR_WIDTH, CV_8UC3);
         asciiImage.setTo(cv::Scalar(0, 0, 0));
 
         for (int y = 0; y < grayFrame.rows; ++y) {
@@ -318,10 +394,13 @@ int main(int argc, char** argv) {
         const auto now = std::chrono::steady_clock::now();
         if (now > nextFrameDeadline) nextFrameDeadline = now;
         const auto waitTime = std::chrono::duration_cast<std::chrono::milliseconds>(nextFrameDeadline - now);
-        int key = window.waitKey(std::max(1, static_cast<int>(waitTime.count())));
+        int key = window.waitKey(isPaused ? 30 : std::max(1, static_cast<int>(waitTime.count())));
         if (key == 27 || key == 'q' || key == 'Q') break;
         if (!window.isOpen()) break;
-        if (key == ' ') isPaused = true;
+        if (key == ' ') {
+            isPaused = !isPaused;
+            if (!isPaused) nextFrameDeadline = std::chrono::steady_clock::now();
+        }
     }
 
     return 0;

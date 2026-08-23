@@ -74,7 +74,7 @@ function Build-Renderer([string]$SourceName, [string]$OutputName) {
     $sourcePath = Join-Path $project $SourceName
     $outputPath = Join-Path $build $OutputName
     Write-Host "Compiling $SourceName with $($cl.FullName)..."
-    & $cl.FullName /nologo /std:c++17 /O2 /EHsc "/I$($header | Split-Path -Parent | Split-Path -Parent)" $sourcePath "/Fe:$outputPath" /link "/LIBPATH:$libDir" $library.Name user32.lib gdi32.lib
+    & $cl.FullName /nologo /std:c++17 /O2 /EHsc "/I$($header | Split-Path -Parent | Split-Path -Parent)" $sourcePath "/Fe:$outputPath" /link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup "/LIBPATH:$libDir" $library.Name user32.lib gdi32.lib shell32.lib
     if ($LASTEXITCODE -ne 0) {
         throw "The build failed for $SourceName."
     }

@@ -13,10 +13,13 @@
                 "${workspaceFolder}/ascii-translation.cpp",
                 "/Fe:${workspaceFolder}/build/Debug/ascii-translation.exe",
                 "/link",
+                "/SUBSYSTEM:WINDOWS",
+                "/ENTRY:mainCRTStartup",
                 "/LIBPATH:${workspaceFolder}/opencv/build/x64/vc16/lib",
                 "opencv_world500.lib",
                 "user32.lib",
-                "gdi32.lib"
+                "gdi32.lib",
+                "shell32.lib"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -43,10 +46,13 @@
                 "${workspaceFolder}/ascii-translation-gpu.cpp",
                 "/Fe:${workspaceFolder}/build/Debug/ascii-translation-gpu.exe",
                 "/link",
+                "/SUBSYSTEM:WINDOWS",
+                "/ENTRY:mainCRTStartup",
                 "/LIBPATH:${workspaceFolder}/opencv/build/x64/vc16/lib",
                 "opencv_world500.lib",
                 "user32.lib",
-                "gdi32.lib"
+                "gdi32.lib",
+                "shell32.lib"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
