@@ -9,11 +9,13 @@
 #include "transparent_window.h"
 
 const std::string ASCII_CHARS = ".:-=+*#%@";
+const int TRANSPARENT_BRIGHTNESS_THRESHOLD = 16;
 
 // Function to convert a single grayscale pixel value to an ASCII character
 int main(int argc, char** argv) {
     bool enableGlow = false;
     bool transparent = true;
+    int transparentBrightnessThreshold = TRANSPARENT_BRIGHTNESS_THRESHOLD;
     double glowStrength = 5.0;
     for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex) {
         if (std::string(argv[argumentIndex]) == "--glow" ||
@@ -40,6 +42,29 @@ int main(int argc, char** argv) {
                 argv[shiftIndex] = argv[shiftIndex + 1];
             }
             --argc;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--transparent-threshold" ||
+               std::string(argv[argumentIndex]) == "-tt") {
+            if (argumentIndex + 1 >= argc) {
+                std::cerr << "Transparent threshold must be an integer from 0 to 255." << std::endl;
+                return -1;
+            }
+            try {
+                std::size_t parsedLength = 0;
+                const std::string thresholdArgument = argv[argumentIndex + 1];
+                transparentBrightnessThreshold = std::stoi(thresholdArgument, &parsedLength);
+                if (parsedLength != thresholdArgument.length() ||
+                    transparentBrightnessThreshold < 0 || transparentBrightnessThreshold > 255) {
+                    throw std::invalid_argument("transparent threshold");
+                }
+            } catch (const std::exception&) {
+                std::cerr << "Transparent threshold must be an integer from 0 to 255." << std::endl;
+                return -1;
+            }
+            for (int shiftIndex = argumentIndex; shiftIndex + 2 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 2];
+            }
+            argc -= 2;
             --argumentIndex;
         } else if (std::string(argv[argumentIndex]) == "--glow-strength" ||
                std::string(argv[argumentIndex]) == "-gs") {
@@ -83,7 +108,7 @@ int main(int argc, char** argv) {
             return -1;
         }
     } else if (argc != 1 && argc != 2) {
-        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue] [-t|-o] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
+        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue] [-t|-o] [--transparent-threshold|-tt value] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
         return -1;
     }
 
@@ -189,7 +214,9 @@ int main(int argc, char** argv) {
 
         for (int y = 0; y < grayFrame.rows; ++y) {
             for (int x = 0; x < grayFrame.cols; ++x) {
-                const int glyphIndex = grayFrame.ptr<uchar>(y)[x] *
+                const int gray = grayFrame.ptr<uchar>(y)[x];
+                if (transparent && gray <= transparentBrightnessThreshold) continue;
+                const int glyphIndex = gray *
                     (static_cast<int>(ASCII_CHARS.length()) - 1) / 255;
                 cv::Mat glyphRegion = asciiImage(
                     cv::Rect(x * CHAR_WIDTH, y * LINE_HEIGHT, CHAR_WIDTH, LINE_HEIGHT));

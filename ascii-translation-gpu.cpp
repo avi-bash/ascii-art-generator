@@ -11,6 +11,7 @@
 #include "transparent_window.h"
 
 const std::string ASCII_CHARS = ".:><-=+*#%@";
+const int TRANSPARENT_BRIGHTNESS_THRESHOLD = 16;
 
 static const char* ASCII_RENDER_KERNEL = R"CLC(
 __kernel void ascii_render(
@@ -20,7 +21,7 @@ __kernel void ascii_render(
     __global const uchar* masks, int mask_step, int mask_offset,
     int src_width, int src_height, int target_width, int target_height,
     int char_width, int line_height, int glyph_width, int glyph_height,
-    int glyph_count)
+    int glyph_count, int transparent, int transparent_threshold)
 {
     const int x = get_global_id(0);
     const int y = get_global_id(1);
@@ -43,6 +44,7 @@ __kernel void ascii_render(
     const int gray = (29 * (int)src[source_index + 0] +
                       150 * (int)src[source_index + 1] +
                       77 * (int)src[source_index + 2]) >> 8;
+    if (transparent && gray <= transparent_threshold) return;
     const int glyph_index = gray * (glyph_count - 1) / 255;
     const int glyph_x = x % char_width;
     const int glyph_y = y % line_height;
@@ -62,6 +64,7 @@ __kernel void ascii_render(
 int main(int argc, char** argv) {
     bool enableGlow = false;
     bool transparent = true;
+    int transparentBrightnessThreshold = TRANSPARENT_BRIGHTNESS_THRESHOLD;
     double glowStrength = 5;
     for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex) {
         if (std::string(argv[argumentIndex]) == "--glow" ||
@@ -88,6 +91,29 @@ int main(int argc, char** argv) {
                 argv[shiftIndex] = argv[shiftIndex + 1];
             }
             --argc;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--transparent-threshold" ||
+               std::string(argv[argumentIndex]) == "-tt") {
+            if (argumentIndex + 1 >= argc) {
+                std::cerr << "Transparent threshold must be an integer from 0 to 255." << std::endl;
+                return -1;
+            }
+            try {
+                std::size_t parsedLength = 0;
+                const std::string thresholdArgument = argv[argumentIndex + 1];
+                transparentBrightnessThreshold = std::stoi(thresholdArgument, &parsedLength);
+                if (parsedLength != thresholdArgument.length() ||
+                    transparentBrightnessThreshold < 0 || transparentBrightnessThreshold > 255) {
+                    throw std::invalid_argument("transparent threshold");
+                }
+            } catch (const std::exception&) {
+                std::cerr << "Transparent threshold must be an integer from 0 to 255." << std::endl;
+                return -1;
+            }
+            for (int shiftIndex = argumentIndex; shiftIndex + 2 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 2];
+            }
+            argc -= 2;
             --argumentIndex;
         } else if (std::string(argv[argumentIndex]) == "--glow-strength" ||
                std::string(argv[argumentIndex]) == "-gs") {
@@ -131,7 +157,7 @@ int main(int argc, char** argv) {
             return -1;
         }
     } else if (argc != 1 && argc != 2) {
-        std::cerr << "Usage: ascii-translation-gpu.exe [video-path] [red] [green] [blue] [-t|-o] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
+        std::cerr << "Usage: ascii-translation-gpu.exe [video-path] [red] [green] [blue] [-t|-o] [--transparent-threshold|-tt value] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
         return -1;
     }
 
@@ -244,7 +270,8 @@ int main(int argc, char** argv) {
                 cv::ocl::KernelArg::ReadOnlyNoSize(gpuMaskAtlas),
                 videoWidth, videoHeight, targetWidth, targetHeight,
                 charWidth, lineHeight, charWidth, lineHeight,
-                static_cast<int>(ASCII_CHARS.length())).run(2, globalSize, nullptr, true)) {
+                static_cast<int>(ASCII_CHARS.length()), transparent ? 1 : 0,
+                transparentBrightnessThreshold).run(2, globalSize, nullptr, true)) {
             std::cerr << "Error: OpenCL ASCII render kernel failed." << std::endl;
             break;
         }
