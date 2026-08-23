@@ -17,6 +17,9 @@ int main(int argc, char** argv) {
     bool transparent = true;
     int transparentBrightnessThreshold = TRANSPARENT_BRIGHTNESS_THRESHOLD;
     double glowStrength = 5.0;
+    double glowFalloff = 5.0;
+    double glowResolution = 0.5;
+    int glowRadius = 0;
     for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex) {
         if (std::string(argv[argumentIndex]) == "--glow" ||
             std::string(argv[argumentIndex]) == "-g") {
@@ -89,6 +92,75 @@ int main(int argc, char** argv) {
             }
             argc -= 2;
             --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--glow-falloff" ||
+               std::string(argv[argumentIndex]) == "-gf") {
+            if (argumentIndex + 1 >= argc) {
+                std::cerr << "Glow falloff must be a non-negative number." << std::endl;
+                return -1;
+            }
+            try {
+                std::size_t parsedLength = 0;
+                const std::string falloffArgument = argv[argumentIndex + 1];
+                glowFalloff = std::stod(falloffArgument, &parsedLength);
+                if (parsedLength != falloffArgument.length() ||
+                    glowFalloff < 0.0 || !std::isfinite(glowFalloff)) {
+                    throw std::invalid_argument("glow falloff");
+                }
+            } catch (const std::exception&) {
+                std::cerr << "Glow falloff must be a non-negative number." << std::endl;
+                return -1;
+            }
+            for (int shiftIndex = argumentIndex; shiftIndex + 2 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 2];
+            }
+            argc -= 2;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--glow-resolution" ||
+               std::string(argv[argumentIndex]) == "-gr") {
+            if (argumentIndex + 1 >= argc) {
+                std::cerr << "Glow resolution must be a number from 0.1 to 1.0." << std::endl;
+                return -1;
+            }
+            try {
+                std::size_t parsedLength = 0;
+                const std::string resolutionArgument = argv[argumentIndex + 1];
+                glowResolution = std::stod(resolutionArgument, &parsedLength);
+                if (parsedLength != resolutionArgument.length() ||
+                    glowResolution < 0.1 || glowResolution > 1.0 ||
+                    !std::isfinite(glowResolution)) {
+                    throw std::invalid_argument("glow resolution");
+                }
+            } catch (const std::exception&) {
+                std::cerr << "Glow resolution must be a number from 0.1 to 1.0." << std::endl;
+                return -1;
+            }
+            for (int shiftIndex = argumentIndex; shiftIndex + 2 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 2];
+            }
+            argc -= 2;
+            --argumentIndex;
+        } else if (std::string(argv[argumentIndex]) == "--glow-radius" ||
+               std::string(argv[argumentIndex]) == "-grd") {
+            if (argumentIndex + 1 >= argc) {
+                std::cerr << "Glow radius must be a non-negative integer." << std::endl;
+                return -1;
+            }
+            try {
+                std::size_t parsedLength = 0;
+                const std::string radiusArgument = argv[argumentIndex + 1];
+                glowRadius = std::stoi(radiusArgument, &parsedLength);
+                if (parsedLength != radiusArgument.length() || glowRadius < 0) {
+                    throw std::invalid_argument("glow radius");
+                }
+            } catch (const std::exception&) {
+                std::cerr << "Glow radius must be a non-negative integer." << std::endl;
+                return -1;
+            }
+            for (int shiftIndex = argumentIndex; shiftIndex + 2 < argc; ++shiftIndex) {
+                argv[shiftIndex] = argv[shiftIndex + 2];
+            }
+            argc -= 2;
+            --argumentIndex;
         }
     }
     const std::string videoPath = argc >= 2 ? argv[1] : "bird.mp4";
@@ -108,7 +180,7 @@ int main(int argc, char** argv) {
             return -1;
         }
     } else if (argc != 1 && argc != 2) {
-        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue] [-t|-o] [--transparent-threshold|-tt value] [--glow|-g] [--glow-strength|-gs value]" << std::endl;
+        std::cerr << "Usage: ascii-translation.exe [video-path] [red] [green] [blue] [-t|-o] [--transparent-threshold|-tt value] [--glow|-g] [--glow-strength|-gs value] [--glow-falloff|-gf value] [--glow-resolution|-gr value] [--glow-radius|-grd value]" << std::endl;
         return -1;
     }
 
@@ -226,10 +298,14 @@ int main(int argc, char** argv) {
 
         if (enableGlow) {
             const cv::Size glowSize(
-                std::max(1, asciiImage.cols / 4),
-                std::max(1, asciiImage.rows / 4));
+                std::max(1, static_cast<int>(asciiImage.cols * glowResolution)),
+                std::max(1, static_cast<int>(asciiImage.rows * glowResolution)));
             cv::resize(asciiImage, glowImage, glowSize, 0.0, 0.0, cv::INTER_AREA);
-            cv::GaussianBlur(glowImage, glowImage, cv::Size(0, 0), 5.0);
+            const int blurRadius = static_cast<int>(std::ceil(glowRadius * glowResolution));
+            const cv::Size blurKernel = blurRadius > 0
+                ? cv::Size(blurRadius * 2 + 1, blurRadius * 2 + 1)
+                : cv::Size(0, 0);
+            cv::GaussianBlur(glowImage, glowImage, blurKernel, glowFalloff / glowResolution);
             cv::resize(glowImage, glowImage, asciiImage.size(), 0.0, 0.0, cv::INTER_LINEAR);
             cv::addWeighted(asciiImage, 1.0, glowImage, glowStrength, 0.0, asciiImage);
         }
