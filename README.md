@@ -10,7 +10,7 @@ to explicitly enable the overlay.
 Use "--glow-strength" or "-gs" with any non-negative number to customize the
 glow brightness. "--glow" and "-g" enable the effect. For example:
 
-ascii-translation.exe c:\..\downloads\bird.mp4 -t -g -gs 3
+ascii-translation.exe c:\...\downloads\bird.mp4 -t -g -gs 3
 
 The default strength is
-"5.0" for the CPU renderer and "2.5" for the GPU renderer.
+"5.0" for the CPU renderer and "5" for the GPU renderer.
