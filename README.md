@@ -9,9 +9,7 @@ Turn a video into a live ASCII-art display with the CPU renderer.
 - 64-bit Windows
 - A video file in a format supported by the bundled OpenCV video backends
 The installer includes the application executable, OpenCV, the FFmpeg video
-backend, and the required Microsoft Visual C++ runtime DLLs. Visual Studio,
-OpenCV, FFmpeg, and a separate C++ runtime do not need to be installed on the
-target PC.
+backend, and the required Microsoft Visual C++ runtime DLLs.
 
 ### Install from the setup executable
 
