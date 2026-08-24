@@ -78,7 +78,7 @@ public:
     }
 
     void update() {
-        drawCheckboxes();
+        if (repaintRequested_) drawCheckboxes();
         cv::waitKey(1);
     }
 
@@ -94,7 +94,10 @@ public:
     }
 
     void setVideoAspectRatio(double aspectRatio) {
-        if (aspectRatio > 0.0) videoAspectRatio_ = aspectRatio;
+        if (aspectRatio > 0.0 && aspectRatio != videoAspectRatio_) {
+            videoAspectRatio_ = aspectRatio;
+            repaintRequested_ = true;
+        }
     }
 
 private:
@@ -106,6 +109,7 @@ private:
             if (DragQueryFileA(drop, 0, path, MAX_PATH) > 0) {
                 window->droppedFile_ = path;
                 window->droppedFileLabel_ = path;
+                window->repaintRequested_ = true;
             }
             DragFinish(drop);
             return 0;
@@ -116,10 +120,15 @@ private:
         return DefWindowProcA(hwnd, message, wParam, lParam);
     }
 
-    static void handleMouse(int event, int x, int y, int, void* userData) {
+    static void handleMouse(int event, int x, int y, int flags, void* userData) {
         if (userData == nullptr) return;
         SettingsWindow* window = static_cast<SettingsWindow*>(userData);
         const double scale = window->scale();
+        if (event == cv::EVENT_MOUSEWHEEL) {
+            window->updateSliderByWheel(x, y, scale, flags, cv::getMouseWheelDelta(flags));
+            window->drawCheckboxes();
+            return;
+        }
         if (event == cv::EVENT_LBUTTONDOWN ||
             (event == cv::EVENT_MOUSEMOVE && window->sliderDragging_)) {
             if (event == cv::EVENT_LBUTTONDOWN) window->sliderDragging_ = true;
@@ -169,6 +178,7 @@ private:
             cv::FONT_HERSHEY_SIMPLEX, 0.6 * uiScale, cv::Scalar(255, 255, 255),
             std::max(1, scaled(1, uiScale)), cv::LINE_AA);
         cv::imshow(windowName_, panel);
+        repaintRequested_ = false;
     }
 
     static void drawCheckbox(cv::Mat& panel, int y, bool checked, const char* label, double scale) {
@@ -276,6 +286,30 @@ private:
         }
     }
 
+    void updateSliderByWheel(int x, int y, double scale, int flags, int wheelDelta) {
+        const int firstY = scaled(220, scale);
+        const int rowHeight = scaled(58, scale);
+        const int index = (y - firstY + rowHeight / 2) / rowHeight;
+        if (index < 0 || index >= 12 || wheelDelta == 0) return;
+        const int left = scaled(270, scale);
+        const int right = static_cast<int>(std::max(620.0, windowWidth() / scale) * scale) -
+            scaled(20, scale);
+        if (x < left || x > right) return;
+        int* values[] = {&settings_.asciiResolution, &settings_.videoScale,
+            &settings_.videoDisplayWidth, &settings_.videoDisplayHeight,
+            &settings_.transparentThreshold, &settings_.red, &settings_.green,
+            &settings_.blue, &settings_.glowStrength, &settings_.glowFalloff,
+            &settings_.glowResolution, &settings_.glowRadius};
+        const int maximums[] = {300, 300, 1600, 1200, 255, 255, 255, 255, 200, 200, 100, 100};
+        const int minimums[] = {40, 25, 180, 180, 0, 0, 0, 0, 0, 0, 10, 0};
+        const bool fineStep = (flags & cv::EVENT_FLAG_CTRLKEY) != 0;
+        const bool glowTenths = index == 8 || index == 9;
+        const int magnitude = (flags & cv::EVENT_FLAG_SHIFTKEY) ? 10 :
+            (fineStep && glowTenths ? 1 : 1);
+        const int step = wheelDelta > 0 ? magnitude : -magnitude;
+        *values[index] = std::clamp(*values[index] + step, minimums[index], maximums[index]);
+    }
+
     int windowWidth() const {
         const cv::Rect imageRect = cv::getWindowImageRect(windowName_);
         return std::max(620, imageRect.width);
@@ -290,5 +324,6 @@ private:
     std::string droppedFileLabel_;
     bool quitRequested_ = false;
     bool sliderDragging_ = false;
+    bool repaintRequested_ = true;
     double videoAspectRatio_ = 1.0;
 };

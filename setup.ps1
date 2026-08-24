@@ -8,7 +8,7 @@ function Find-File([string]$Root, [string]$Name) {
         Select-Object -First 1
 }
 
-foreach ($sourceName in @('ascii-translation.cpp', 'ascii-translation-gpu.cpp')) {
+foreach ($sourceName in @('ascii-translation.cpp')) {
     if (-not (Test-Path (Join-Path $project $sourceName))) {
         throw "$sourceName was not found in $project."
     }
@@ -82,10 +82,9 @@ function Build-Renderer([string]$SourceName, [string]$OutputName) {
 }
 
 Build-Renderer 'ascii-translation.cpp' 'ascii-translation.exe'
-Build-Renderer 'ascii-translation-gpu.cpp' 'ascii-translation-gpu.exe'
 Copy-Item $dll.FullName $build -Force
 if (Test-Path (Join-Path $project 'bird.mp4')) {
-    Write-Host 'Run either executable in build\Debug to play bird.mp4.'
+    Write-Host 'Run ascii-translation.exe in build\Debug to play bird.mp4.'
 } else {
     Write-Host 'Add a video file, then run either executable with its path as the first argument.'
 }

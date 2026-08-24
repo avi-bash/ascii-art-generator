@@ -69,11 +69,13 @@ public:
     }
 
     void setTransparent(bool transparent) {
+        if (transparent == transparent_) return;
         transparent_ = transparent;
     }
 
     void setSize(int width, int height) {
         if (width <= 0 || height <= 0) return;
+        if (width == width_ && height == height_) return;
         width_ = width;
         height_ = height;
         if (hwnd_ != nullptr) {
@@ -86,7 +88,11 @@ public:
         if (!open_ || image.empty()) return;
 
         resized_.create(height_, width_, CV_8UC3);
-        cv::resize(image, resized_, cv::Size(width_, height_), 0.0, 0.0, cv::INTER_LINEAR);
+        if (image.cols == width_ && image.rows == height_) {
+            image.copyTo(resized_);
+        } else {
+            cv::resize(image, resized_, cv::Size(width_, height_), 0.0, 0.0, cv::INTER_LINEAR);
+        }
         cv::rectangle(resized_, cv::Rect(width_ - 40, 0, 40, 36), cv::Scalar(32, 32, 32), cv::FILLED);
         cv::line(resized_, cv::Point(width_ - 27, 11), cv::Point(width_ - 13, 25),
             cv::Scalar(255, 255, 255), 2, cv::LINE_AA);
@@ -94,14 +100,12 @@ public:
             cv::Scalar(255, 255, 255), 2, cv::LINE_AA);
         bgra_.create(height_, width_, CV_8UC4);
         cv::cvtColor(resized_, bgra_, cv::COLOR_BGR2BGRA);
-        for (int y = 0; y < bgra_.rows; ++y) {
-            cv::Vec4b* row = bgra_.ptr<cv::Vec4b>(y);
-            for (int x = 0; x < bgra_.cols; ++x) {
-                if (transparent_) {
+        if (transparent_) {
+            for (int y = 0; y < bgra_.rows; ++y) {
+                cv::Vec4b* row = bgra_.ptr<cv::Vec4b>(y);
+                for (int x = 0; x < bgra_.cols; ++x) {
                     row[x][3] = row[x][0] > row[x][1] ? row[x][0] : row[x][1];
                     row[x][3] = row[x][3] > row[x][2] ? row[x][3] : row[x][2];
-                } else {
-                    row[x][3] = 255;
                 }
             }
         }

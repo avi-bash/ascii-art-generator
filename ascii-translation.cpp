@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <string>
@@ -252,6 +253,11 @@ int main(int argc, char** argv) {
 
     std::vector<cv::Mat> glyphs;
     std::vector<cv::Mat> glyphMasks;
+    std::array<unsigned char, 256> glyphIndexByGray{};
+    for (int gray = 0; gray < 256; ++gray) {
+        glyphIndexByGray[gray] = static_cast<unsigned char>(gray *
+            (static_cast<int>(ASCII_CHARS.length()) - 1) / 255);
+    }
     glyphs.reserve(ASCII_CHARS.length());
     glyphMasks.reserve(ASCII_CHARS.length());
     for (const char character : ASCII_CHARS) {
@@ -277,6 +283,9 @@ int main(int argc, char** argv) {
     auto framePeriod = std::chrono::duration<double>(1.0 / fps);
     auto nextFrameDeadline = std::chrono::steady_clock::now();
     bool isPaused = false;
+    int appliedWindowWidth = windowWidth;
+    int appliedWindowHeight = windowHeight;
+    bool appliedTransparency = transparent;
 
     while (true) {
         settingsWindow.update();
@@ -310,7 +319,11 @@ int main(int argc, char** argv) {
             settings.videoDisplayWidth * settings.videoScale / 100.0)));
         windowHeight = std::max(180, static_cast<int>(std::round(
             settings.videoDisplayHeight * settings.videoScale / 100.0)));
-        window.setSize(windowWidth, windowHeight);
+        if (windowWidth != appliedWindowWidth || windowHeight != appliedWindowHeight) {
+            window.setSize(windowWidth, windowHeight);
+            appliedWindowWidth = windowWidth;
+            appliedWindowHeight = windowHeight;
+        }
         transparent = settings.transparent;
         enableGlow = settings.glowEnabled;
         transparentBrightnessThreshold = settings.transparentThreshold;
@@ -318,7 +331,10 @@ int main(int argc, char** argv) {
         glowFalloff = settings.glowFalloffValue();
         glowResolution = settings.glowResolutionValue();
         glowRadius = settings.glowRadius;
-        window.setTransparent(transparent);
+        if (transparent != appliedTransparency) {
+            window.setTransparent(transparent);
+            appliedTransparency = transparent;
+        }
 
         const cv::Scalar updatedTextColor = settings.color();
         if (updatedTextColor[0] != textColor[0] || updatedTextColor[1] != textColor[1] ||
@@ -364,8 +380,7 @@ int main(int argc, char** argv) {
             for (int x = 0; x < grayFrame.cols; ++x) {
                 const int gray = grayFrame.ptr<uchar>(y)[x];
                 if (transparent && gray <= transparentBrightnessThreshold) continue;
-                const int glyphIndex = gray *
-                    (static_cast<int>(ASCII_CHARS.length()) - 1) / 255;
+                const int glyphIndex = glyphIndexByGray[gray];
                 cv::Mat glyphRegion = asciiImage(
                     cv::Rect(x * CHAR_WIDTH, y * LINE_HEIGHT, CHAR_WIDTH, LINE_HEIGHT));
                 glyphs[glyphIndex].copyTo(glyphRegion, glyphMasks[glyphIndex]);
