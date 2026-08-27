@@ -19,7 +19,8 @@
                 "opencv_world500.lib",
                 "user32.lib",
                 "gdi32.lib",
-                "shell32.lib"
+                "shell32.lib",
+                "comdlg32.lib"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"

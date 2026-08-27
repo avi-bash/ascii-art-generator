@@ -26,10 +26,10 @@ function Find-File([string]$Root, [string]$Name) {
         Select-Object -First 1
 }
 
-if (-not (Test-Path (Join-Path $build 'ascii-translation.exe'))) {
-    Write-Host 'Compiled renderers are missing. Running setup.ps1 first...'
-    & (Join-Path $project 'setup.ps1')
-    if ($LASTEXITCODE -ne 0) { throw 'The renderer build failed.' }
+Write-Host 'Building the CPU renderer...'
+& (Join-Path $project 'setup.ps1')
+if ($LASTEXITCODE -ne 0) {
+    throw 'The renderer build failed.'
 }
 
 $opencvDll = Find-File (Join-Path $project 'opencv') 'opencv_world*.dll'

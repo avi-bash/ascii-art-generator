@@ -271,6 +271,39 @@ int main(int argc, char** argv) {
         glyphMasks.push_back(glyphMask);
     }
 
+    auto renderFrame = [&](const cv::Mat& sourceFrame, cv::Mat& outputImage) {
+        cv::resize(sourceFrame, resizedFrame, cv::Size(targetWidth, targetHeight));
+        cv::cvtColor(resizedFrame, grayFrame, cv::COLOR_BGR2GRAY);
+        outputImage.create(targetHeight * LINE_HEIGHT + BASELINE,
+            targetWidth * CHAR_WIDTH, CV_8UC3);
+        outputImage.setTo(cv::Scalar(0, 0, 0));
+
+        for (int y = 0; y < grayFrame.rows; ++y) {
+            for (int x = 0; x < grayFrame.cols; ++x) {
+                const int gray = grayFrame.ptr<uchar>(y)[x];
+                if (transparent && gray <= transparentBrightnessThreshold) continue;
+                const int glyphIndex = glyphIndexByGray[gray];
+                cv::Mat glyphRegion = outputImage(
+                    cv::Rect(x * CHAR_WIDTH, y * LINE_HEIGHT, CHAR_WIDTH, LINE_HEIGHT));
+                glyphs[glyphIndex].copyTo(glyphRegion, glyphMasks[glyphIndex]);
+            }
+        }
+
+        if (enableGlow) {
+            const cv::Size glowSize(
+                std::max(1, static_cast<int>(outputImage.cols * glowResolution)),
+                std::max(1, static_cast<int>(outputImage.rows * glowResolution)));
+            cv::resize(outputImage, glowImage, glowSize, 0.0, 0.0, cv::INTER_AREA);
+            const int blurRadius = static_cast<int>(std::ceil(glowRadius * glowResolution));
+            const cv::Size blurKernel = blurRadius > 0
+                ? cv::Size(blurRadius * 2 + 1, blurRadius * 2 + 1)
+                : cv::Size(0, 0);
+            cv::GaussianBlur(glowImage, glowImage, blurKernel, glowFalloff / glowResolution);
+            cv::resize(glowImage, glowImage, outputImage.size(), 0.0, 0.0, cv::INTER_LINEAR);
+            cv::addWeighted(outputImage, 1.0, glowImage, glowStrength, 0.0, outputImage);
+        }
+    };
+
     TransparentWindow window("ASCII Video", windowWidth, windowHeight, transparent);
     if (!window.isOpen()) {
         std::cerr << "Error: Could not create the transparent display window." << std::endl;
@@ -297,6 +330,7 @@ int main(int argc, char** argv) {
             const int replacementHeight = static_cast<int>(replacement.get(cv::CAP_PROP_FRAME_HEIGHT));
             if (replacement.isOpened() && replacementWidth > 0 && replacementHeight > 0) {
                 cap = std::move(replacement);
+                videoPath = droppedFile;
                 videoWidth = replacementWidth;
                 videoHeight = replacementHeight;
                 videoAspectRatio = static_cast<double>(videoWidth) / videoHeight;
@@ -348,6 +382,37 @@ int main(int argc, char** argv) {
             }
         }
 
+        std::string exportPath;
+        if (settingsWindow.takeExportRequest(exportPath)) {
+            const double currentFrame = cap.get(cv::CAP_PROP_POS_FRAMES);
+            cv::VideoCapture exportCapture(videoPath);
+            cv::VideoWriter writer;
+            bool exportSucceeded = false;
+            if (exportCapture.isOpened()) {
+                exportCapture.set(cv::CAP_PROP_POS_FRAMES, 0);
+                if (exportCapture.read(frame)) {
+                    renderFrame(frame, asciiImage);
+                    writer.open(exportPath, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'),
+                        fps, asciiImage.size(), true);
+                    if (writer.isOpened()) {
+                        exportSucceeded = true;
+                        do {
+                            renderFrame(frame, asciiImage);
+                            writer.write(asciiImage);
+                        } while (exportCapture.read(frame));
+                    }
+                }
+            }
+            writer.release();
+            exportCapture.release();
+            cap.set(cv::CAP_PROP_POS_FRAMES, currentFrame);
+            if (exportSucceeded) {
+                std::cerr << "Exported video to: " << exportPath << std::endl;
+            } else {
+                std::cerr << "Error: Could not write video export: " << exportPath << std::endl;
+            }
+        }
+
         if (!isPaused) {
             while (std::chrono::steady_clock::now() > nextFrameDeadline +
                 std::chrono::duration_cast<std::chrono::steady_clock::duration>(framePeriod)) {
@@ -365,41 +430,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        // 1. Resize the frame down to terminal resolution
-        cv::resize(frame, resizedFrame, cv::Size(targetWidth, targetHeight));
-
-        // 2. Convert color frame to grayscale (0-255 light intensity)
-        cv::cvtColor(resizedFrame, grayFrame, cv::COLOR_BGR2GRAY);
-
-        // 3. Draw the ASCII frame into an image for the OpenCV window
-        asciiImage.create(targetHeight * LINE_HEIGHT + BASELINE,
-            targetWidth * CHAR_WIDTH, CV_8UC3);
-        asciiImage.setTo(cv::Scalar(0, 0, 0));
-
-        for (int y = 0; y < grayFrame.rows; ++y) {
-            for (int x = 0; x < grayFrame.cols; ++x) {
-                const int gray = grayFrame.ptr<uchar>(y)[x];
-                if (transparent && gray <= transparentBrightnessThreshold) continue;
-                const int glyphIndex = glyphIndexByGray[gray];
-                cv::Mat glyphRegion = asciiImage(
-                    cv::Rect(x * CHAR_WIDTH, y * LINE_HEIGHT, CHAR_WIDTH, LINE_HEIGHT));
-                glyphs[glyphIndex].copyTo(glyphRegion, glyphMasks[glyphIndex]);
-            }
-        }
-
-        if (enableGlow) {
-            const cv::Size glowSize(
-                std::max(1, static_cast<int>(asciiImage.cols * glowResolution)),
-                std::max(1, static_cast<int>(asciiImage.rows * glowResolution)));
-            cv::resize(asciiImage, glowImage, glowSize, 0.0, 0.0, cv::INTER_AREA);
-            const int blurRadius = static_cast<int>(std::ceil(glowRadius * glowResolution));
-            const cv::Size blurKernel = blurRadius > 0
-                ? cv::Size(blurRadius * 2 + 1, blurRadius * 2 + 1)
-                : cv::Size(0, 0);
-            cv::GaussianBlur(glowImage, glowImage, blurKernel, glowFalloff / glowResolution);
-            cv::resize(glowImage, glowImage, asciiImage.size(), 0.0, 0.0, cv::INTER_LINEAR);
-            cv::addWeighted(asciiImage, 1.0, glowImage, glowStrength, 0.0, asciiImage);
-        }
+        renderFrame(frame, asciiImage);
 
         // 4. Render to the standalone OpenCV window
         window.show(asciiImage);

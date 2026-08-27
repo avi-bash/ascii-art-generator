@@ -74,7 +74,7 @@ function Build-Renderer([string]$SourceName, [string]$OutputName) {
     $sourcePath = Join-Path $project $SourceName
     $outputPath = Join-Path $build $OutputName
     Write-Host "Compiling $SourceName with $($cl.FullName)..."
-    & $cl.FullName /nologo /std:c++17 /O2 /EHsc "/I$($header | Split-Path -Parent | Split-Path -Parent)" $sourcePath "/Fe:$outputPath" /link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup "/LIBPATH:$libDir" $library.Name user32.lib gdi32.lib shell32.lib
+    & $cl.FullName /nologo /std:c++17 /O2 /EHsc "/I$($header | Split-Path -Parent | Split-Path -Parent)" $sourcePath "/Fe:$outputPath" /link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup "/LIBPATH:$libDir" $library.Name user32.lib gdi32.lib shell32.lib comdlg32.lib
     if ($LASTEXITCODE -ne 0) {
         throw "The build failed for $SourceName."
     }
@@ -86,5 +86,5 @@ Copy-Item $dll.FullName $build -Force
 if (Test-Path (Join-Path $project 'bird.mp4')) {
     Write-Host 'Run ascii-translation.exe in build\Debug to play bird.mp4.'
 } else {
-    Write-Host 'Add a video file, then run either executable with its path as the first argument.'
+    Write-Host 'Add a video file, then run ascii-translation.exe with its path as the first argument.'
 }

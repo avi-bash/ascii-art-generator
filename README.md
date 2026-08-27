@@ -117,6 +117,10 @@ Right-click any slider to reset that option to its default value.
 Drop a video file onto the bordered drop box in the settings window to switch
 the current preview. Playback restarts from the beginning of the new file.
 
+Click **EXPORT VIDEO** to choose an AVI output path and save the converted
+video. The export uses the current ASCII, color, transparency, and glow
+settings and processes the complete selected video.
+
 The command-line options are also supported for scripting and for setting the
 initial values.
 
